@@ -13,15 +13,14 @@
     "common": {
       "name": "AI Survey Auditor",
       "logoUrl": "https://www.gstatic.com/images/icons/material/system/1x/analytics_black_24dp.png",
+      "homepageTrigger": {
+        "runFunction": "onOpen"
+      },
       "layoutProperties": {
         "primaryColor": "#1a73e8",
         "secondaryColor": "#4285f4"
       }
     },
-    "forms": {
-      "homepageTrigger": {
-        "runFunction": "onOpen"
-      }
-    }
+    "forms": {}
   }
 }
