@@ -13,11 +13,17 @@ function analyzeForm(formJson) {
     + '1) Logic dead-ends or unhandled routing branches. '
     + '2) "Mom Test" violations (leading questions, pitching disguised as questions, future-prediction questions). '
     + '3) Missing demographic edge cases (e.g., overlapping ranges). '
+    + '4) Any other critical issues that would cause respondent confusion or data quality problems. '
+    + '5) Methodology issues (e.g., leading questions, double-barreled questions, lack of neutral options). '
+    + '6) Opportunities to improve question clarity, flow, or respondent engagement. '
+    + '7) Grammatical errors or typos that could affect respondent understanding. '
+    + 'Provide actionable suggestions to fix any issues you find. '
     + 'Your output MUST be purely JSON with no markdown, no code fences, no explanation text. '
     + 'Return EXACTLY this structure and nothing else: '
     + '{"critical_errors":["..."],"methodology_warnings":["..."],"suggestions":["..."]} '
     + 'Use empty arrays if no issues found in a category. '
     + 'Do NOT wrap the JSON in ``` or any other formatting. Only raw JSON.';
+    + 'Double-check that your output is valid JSON and adheres EXACTLY to the specified structure.';
 
   var messages = [
     { role: 'system', content: systemPrompt },
@@ -99,19 +105,53 @@ function parseAuditResponse(text) {
 
   var jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
-    parsed = tryParseJson(jsonMatch[0]);
+    var candidate = jsonMatch[0];
+
+    parsed = tryParseJson(candidate);
     if (parsed) return parsed;
 
-    var sanitized = sanitizeJsonString(jsonMatch[0]);
-    parsed = tryParseJson(sanitized);
+    parsed = tryParseJson(sanitizeJsonString(candidate));
     if (parsed) return parsed;
   }
+
+  parsed = salvageAuditResponse(cleaned);
+  if (parsed) return parsed;
 
   return null;
 }
 
 function sanitizeJsonString(str) {
-  return str.replace(/\("([^)]*)"\)/g, function(match) {
+  var fixed = str;
+  fixed = fixed.replace(/\("([^)]*)"\)/g, function(match) {
     return match.replace(/"/g, '\\"');
   });
+  fixed = fixed.replace(/,\s*""\s*\}/g, '}');
+  fixed = fixed.replace(/,\s*\}/g, '}');
+  fixed = fixed.replace(/,\s*\]/g, ']');
+  return fixed;
+}
+
+function salvageAuditResponse(text) {
+  var result = { critical_errors: [], methodology_warnings: [], suggestions: [] };
+  var found = false;
+
+  var criticalMatch = text.match(/"critical_errors"\s*:\s*(\[[^\]]*\])/);
+  if (criticalMatch) {
+    var arr = tryParseJson(criticalMatch[1]);
+    if (arr) { result.critical_errors = arr; found = true; }
+  }
+
+  var warningMatch = text.match(/"methodology_warnings"\s*:\s*(\[[^\]]*\])/);
+  if (warningMatch) {
+    var arr = tryParseJson(warningMatch[1]);
+    if (arr) { result.methodology_warnings = arr; found = true; }
+  }
+
+  var suggestionMatch = text.match(/"suggestions"\s*:\s*(\[[^\]]*\])/);
+  if (suggestionMatch) {
+    var arr = tryParseJson(suggestionMatch[1]);
+    if (arr) { result.suggestions = arr; found = true; }
+  }
+
+  return found ? result : null;
 }
