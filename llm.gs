@@ -8,7 +8,16 @@ function analyzeForm(formJson) {
 
   var formJsonString = JSON.stringify(formJson);
 
-  var systemPrompt = 'You are an expert UX Researcher and Survey Auditor. Your output MUST be strictly valid JSON. Analyze the provided form JSON for: 1) Logic dead-ends or unhandled routing branches. 2) "Mom Test" violations (leading questions, pitching disguised as questions, future-prediction questions). 3) Missing demographic edge cases (e.g., overlapping ranges). Return only this JSON structure: { "critical_errors": ["..."], "methodology_warnings": ["..."], "suggestions": ["..."] }. Use empty arrays if no issues found in a category.';
+  var systemPrompt = 'You are an expert UX Researcher and Survey Auditor. '
+    + 'Analyze the provided form JSON for: '
+    + '1) Logic dead-ends or unhandled routing branches. '
+    + '2) "Mom Test" violations (leading questions, pitching disguised as questions, future-prediction questions). '
+    + '3) Missing demographic edge cases (e.g., overlapping ranges). '
+    + 'Your output MUST be purely JSON with no markdown, no code fences, no explanation text. '
+    + 'Return EXACTLY this structure and nothing else: '
+    + '{"critical_errors":["..."],"methodology_warnings":["..."],"suggestions":["..."]} '
+    + 'Use empty arrays if no issues found in a category. '
+    + 'Do NOT wrap the JSON in ``` or any other formatting. Only raw JSON.';
 
   var messages = [
     { role: 'system', content: systemPrompt },
@@ -18,7 +27,6 @@ function analyzeForm(formJson) {
   var payload = {
     model: model,
     messages: messages,
-    response_format: { type: 'json_object' },
     temperature: 0.2
   };
 
@@ -39,7 +47,7 @@ function analyzeForm(formJson) {
     method: 'post',
     headers: headers,
     payload: JSON.stringify(payload),
-    muteHttpExceptions: false
+    muteHttpExceptions: true
   };
 
   var response = UrlFetchApp.fetch(actualUrl, options);
@@ -64,18 +72,10 @@ function analyzeForm(formJson) {
   }
 
   var content = responseData.choices[0].message.content;
-
-  var parsed = tryParseJson(content);
-  if (!parsed) {
-    var trimmed = content.trim();
-    var jsonMatch = trimmed.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      parsed = tryParseJson(jsonMatch[0]);
-    }
-  }
+  var parsed = parseAuditResponse(content);
 
   if (!parsed) {
-    throw new Error('Failed to parse LLM response as JSON.');
+    throw new Error('Failed to parse LLM response as JSON. Raw response: ' + content.substring(0, 200));
   }
 
   return {
@@ -83,4 +83,35 @@ function analyzeForm(formJson) {
     methodology_warnings: parsed.methodology_warnings || [],
     suggestions: parsed.suggestions || []
   };
+}
+
+function parseAuditResponse(text) {
+  var cleaned = text.trim();
+
+  var parsed = tryParseJson(cleaned);
+  if (parsed) return parsed;
+
+  var codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    parsed = tryParseJson(codeBlockMatch[1].trim());
+    if (parsed) return parsed;
+  }
+
+  var jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    parsed = tryParseJson(jsonMatch[0]);
+    if (parsed) return parsed;
+
+    var sanitized = sanitizeJsonString(jsonMatch[0]);
+    parsed = tryParseJson(sanitized);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
+function sanitizeJsonString(str) {
+  return str.replace(/\("([^)]*)"\)/g, function(match) {
+    return match.replace(/"/g, '\\"');
+  });
 }

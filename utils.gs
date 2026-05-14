@@ -8,25 +8,11 @@ function setUserProperty(key, value) {
 
 function getActualBaseUrl(baseUrl) {
   if (!baseUrl) return '';
-  if (baseUrl.endsWith('/chat/completions')) return baseUrl;
+  if (baseUrl.indexOf('chat/completions') !== -1) return baseUrl;
+  if (baseUrl.endsWith('/chat')) return baseUrl + '/completions';
   if (baseUrl.endsWith('/v1')) return baseUrl + '/chat/completions';
   if (baseUrl.endsWith('/')) return baseUrl + 'v1/chat/completions';
   return baseUrl + '/v1/chat/completions';
-}
-
-function showErrorToast(message) {
-  CardService.newActionResponseBuilder()
-    .setNotification(CardService.newNotification()
-      .setText(message)
-      .setType(CardService.NotificationType.ERROR))
-    .build();
-}
-
-function showSuccessToast(message) {
-  CardService.newActionResponseBuilder()
-    .setNotification(CardService.newNotification()
-      .setText(message))
-    .build();
 }
 
 function tryParseJson(text) {
@@ -35,8 +21,4 @@ function tryParseJson(text) {
   } catch (e) {
     return null;
   }
-}
-
-function formatCountLabel(num) {
-  return num + ' ' + (num === 1 ? 'issue' : 'issues') + ' found';
 }

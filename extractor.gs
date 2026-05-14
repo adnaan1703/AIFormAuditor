@@ -3,6 +3,10 @@ function extractFormLogic() {
   var items = form.getItems();
   var result = [];
 
+  var sectionMap = {};
+  var currentSectionTitle = 'Start';
+  var sectionIndex = 0;
+
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
     var itemType = item.getType();
@@ -11,36 +15,19 @@ function extractFormLogic() {
       id: item.getId().toString(),
       type: itemType.toString(),
       title: item.getTitle(),
-      helpText: item.getHelpText() || ''
+      helpText: item.getHelpText() || '',
+      section: sectionIndex + ': ' + currentSectionTitle
     };
+
+    var isSectionBreak = false;
 
     switch (itemType) {
       case FormApp.ItemType.MULTIPLE_CHOICE:
         var mcItem = item.asMultipleChoiceItem();
         var mcChoices = mcItem.getChoices();
         obj.choices = mcChoices.map(function(choice) {
-          var nav = choice.getPageNavigationType();
-          var navLabel = 'CONTINUE';
-
-          if (nav === FormApp.PageNavigationType.GO_TO_PAGE) {
-            var gotoPage = choice.getGotoPage();
-            if (gotoPage) {
-              navLabel = 'GO_TO_SECTION_' + gotoPage.getTitle();
-            } else {
-              navLabel = 'SUBMIT';
-            }
-          } else if (nav === FormApp.PageNavigationType.SUBMIT) {
-            navLabel = 'SUBMIT';
-          } else if (nav === FormApp.PageNavigationType.RESTART) {
-            navLabel = 'RESTART';
-          }
-
-          return {
-            text: choice.getValue(),
-            navigation: navLabel
-          };
+          return buildChoiceEntry(choice);
         });
-
         if (mcItem.hasOtherOption()) {
           obj.hasOtherOption = true;
         }
@@ -50,12 +37,8 @@ function extractFormLogic() {
         var cbItem = item.asCheckboxItem();
         var cbChoices = cbItem.getChoices();
         obj.choices = cbChoices.map(function(choice) {
-          return {
-            text: choice.getValue(),
-            navigation: 'CONTINUE'
-          };
+          return { text: choice.getValue(), navigation: 'CONTINUE' };
         });
-
         if (cbItem.hasOtherOption()) {
           obj.hasOtherOption = true;
         }
@@ -65,26 +48,7 @@ function extractFormLogic() {
         var listItem = item.asListItem();
         var listChoices = listItem.getChoices();
         obj.choices = listChoices.map(function(choice) {
-          var nav = choice.getPageNavigationType();
-          var navLabel = 'CONTINUE';
-
-          if (nav === FormApp.PageNavigationType.GO_TO_PAGE) {
-            var gotoPage = choice.getGotoPage();
-            if (gotoPage) {
-              navLabel = 'GO_TO_SECTION_' + gotoPage.getTitle();
-            } else {
-              navLabel = 'SUBMIT';
-            }
-          } else if (nav === FormApp.PageNavigationType.SUBMIT) {
-            navLabel = 'SUBMIT';
-          } else if (nav === FormApp.PageNavigationType.RESTART) {
-            navLabel = 'RESTART';
-          }
-
-          return {
-            text: choice.getValue(),
-            navigation: navLabel
-          };
+          return buildChoiceEntry(choice);
         });
         break;
 
@@ -101,16 +65,19 @@ function extractFormLogic() {
         } else if (pbNavigation === FormApp.PageNavigationType.RESTART) {
           obj.goToRestart = true;
         }
+        isSectionBreak = true;
+        break;
+
+      case FormApp.ItemType.SECTION_HEADER:
+        currentSectionTitle = item.getTitle();
+        sectionIndex++;
+        isSectionBreak = true;
         break;
 
       case FormApp.ItemType.PARAGRAPH_TEXT:
-        obj.validation = {};
-        var ptItem = item.asParagraphTextItem();
         break;
 
       case FormApp.ItemType.TEXT:
-        obj.validation = {};
-        var tItem = item.asTextItem();
         break;
 
       case FormApp.ItemType.SCALE:
@@ -128,36 +95,61 @@ function extractFormLogic() {
         break;
 
       case FormApp.ItemType.DATE:
-        var dateItem = item.asDateItem();
         break;
 
       case FormApp.ItemType.TIME:
-        var timeItem = item.asTimeItem();
         break;
 
       case FormApp.ItemType.DURATION:
-        var durItem = item.asDurationItem();
         break;
 
       case FormApp.ItemType.IMAGE:
-        var imgItem = item.asImageItem();
         break;
 
       case FormApp.ItemType.VIDEO:
-        var vidItem = item.asVideoItem();
-        break;
-
-      case FormApp.ItemType.SECTION_HEADER:
-        var shItem = item.asSectionHeaderItem();
-        obj.description = item.getHelpText();
         break;
 
       default:
         break;
     }
 
+    if (isSectionBreak) {
+      sectionMap[obj.title] = sectionIndex;
+    }
+
     result.push(obj);
   }
 
+  result.push({
+    summary: {
+      totalItems: items.length,
+      totalSections: sectionIndex,
+      sectionMap: sectionMap
+    }
+  });
+
   return result;
+}
+
+function buildChoiceEntry(choice) {
+  var nav = choice.getPageNavigationType();
+  var navLabel = 'CONTINUE';
+
+  if (nav === FormApp.PageNavigationType.GO_TO_PAGE) {
+    var gotoPage = choice.getGotoPage();
+    if (gotoPage) {
+      navLabel = 'GO_TO_SECTION_' + gotoPage.getTitle();
+    } else {
+      navLabel = 'SUBMIT';
+    }
+  } else if (nav === FormApp.PageNavigationType.SUBMIT) {
+    navLabel = 'SUBMIT';
+  } else if (nav === FormApp.PageNavigationType.RESTART) {
+    navLabel = 'RESTART';
+  }
+
+  return {
+    text: choice.getValue(),
+    navigation: navLabel
+  };
 }
